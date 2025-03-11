@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Book Medical Appointment</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      max-width: 600px;
+    }
+    label {
+      margin-top: 10px;
+      display: block;
+    }
+    input, select, button {
+      padding: 8px;
+      margin: 5px 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .response {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f0f0f0;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Book Medical Appointment</h1>
+  <form id="appointmentForm">
+    <label for="name">Name:</label>
+    <input type="text" id="name" name="name" required>
+
+    <label for="age">Age:</label>
+    <input type="number" id="age" name="age" required>
+
+    <label for="gender">Gender:</label>
+    <select id="gender" name="gender" required>
+      <option value="">Select Gender</option>
+      <option value="Male">Male</option>
+      <option value="Female">Female</option>
+      <option value="Other">Other</option>
+    </select>
+
+    <label for="contact_number">Contact Number:</label>
+    <input type="text" id="contact_number" name="contact_number" required>
+
+    <label for="email">Email:</label>
+    <input type="email" id="email" name="email" required>
+
+    <label for="medical_history">Medical History / Specialization:</label>
+    <input type="text" id="medical_history" name="medical_history" placeholder="e.g. Cardiology" required>
+
+    <label for="appointment_date">Appointment Date (YYYY-MM-DD):</label>
+    <input type="date" id="appointment_date" name="appointment_date" required>
+
+    <label for="appointment_time">Appointment Time (HH:MM):</label>
+    <input type="time" id="appointment_time" name="appointment_time" required>
+
+    <button type="submit">Book Appointment</button>
+  </form>
+
+  <div class="response" id="response"></div>
+
+  <script>
+    document.getElementById('appointmentForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const data = {
+        name: document.getElementById('name').value,
+        age: parseInt(document.getElementById('age').value),
+        gender: document.getElementById('gender').value,
+        contact_number: document.getElementById('contact_number').value,
+        email: document.getElementById('email').value,
+        medical_history: document.getElementById('medical_history').value,
+        appointment_date: document.getElementById('appointment_date').value,
+        appointment_time: document.getElementById('appointment_time').value
+      };
+
+      try {
+        const response = await fetch('/api/book_appointment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        document.getElementById('response').innerText = JSON.stringify(result, null, 2);
+      } catch (error) {
+        document.getElementById('response').innerText = 'Error: ' + error;
+      }
+    });
+  </script>
+</body>
+</html>
