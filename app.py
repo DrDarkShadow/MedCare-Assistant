@@ -22,41 +22,35 @@ def home():
 def ai_response():
     data = request.json
     user_input = data.get('message')
+
+    # Step 1: Extract intent and details
+    extracted_data = extract_intent_and_details(user_input)
+    if not extracted_data or "intent" not in extracted_data:
+        return jsonify({"error": "Couldn't understand request"}), 400
+
+    intent = extracted_data["intent"]
     
-    # Handle field updates
-    if isinstance(user_input, dict):
-        action = user_input.get('action')
-        
-        if action == 'update_field':
-            extracted_data = user_input.get('current_state', {})
-            field = user_input.get('field')
-            value = user_input.get('value')
-            
-            # Apply conversions based on field type
-            if 'date' in field:
-                value = convert_relative_date(value)
-            elif 'time' in field:
-                value = convert_to_24hour_format(value)
-            
-            extracted_data[field] = value
-            missing = check_missing_fields(extracted_data)
-            
-            return jsonify({
-                "missing_fields": missing,
-                "current_state": extracted_data
-            })
-        
-        elif action == 'complete_booking':
-            extracted_data = user_input.get('current_state', {})
-            # Validate final data
-            missing = check_missing_fields(extracted_data)
-            if missing:
-                return jsonify({
-                    "error": "Still missing fields",
-                    "missing_fields": missing
-                }), 400
-                
-            # Actual booking logic
+    # Step 2: Check missing fields
+    required_fields = {
+        'book': ["name", "appointment_date", "appointment_time", "age", 
+                "gender", "contact_number", "email", "department"],
+        'reschedule': ["name", "old_date", "old_time", "new_date", "new_time"],
+        'cancel': ["name", "appointment_date", "appointment_time"]
+    }.get(intent, [])
+
+    missing = [field for field in required_fields if not extracted_data.get(field)]
+    
+    # If missing fields, return them
+    if missing:
+        return jsonify({
+            "missing_fields": missing,
+            "current_state": extracted_data,
+            "intent": intent
+        })
+
+    # Step 3: All fields present - process immediately
+    try:
+        if intent == "book":
             result = book_appointment(
                 extracted_data["name"],
                 extracted_data["age"],
@@ -67,36 +61,48 @@ def ai_response():
                 extracted_data["appointment_date"],
                 extracted_data["appointment_time"]
             )
-            
-            return jsonify({
-                "message": "Appointment booked successfully!",
-                "appointment": result
-            })
+        elif intent == "reschedule":
+            result = reschedule_appointment(
+                extracted_data["name"],
+                extracted_data["old_date"],
+                extracted_data["old_time"],
+                extracted_data["new_date"],
+                extracted_data["new_time"]
+            )
+        elif intent == "cancel":
+            result = cancel_appointment(
+                extracted_data["name"],
+                extracted_data["appointment_date"],
+                extracted_data["appointment_time"]
+            )
+        else:
+            return jsonify({"error": "Invalid intent"}), 400
 
-    # Initial request handling
-    extracted_data = extract_intent_and_details(user_input)
-    missing = check_missing_fields(extracted_data)
-    
-    return jsonify({
-        "missing_fields": missing,
-        "current_state": extracted_data
-    })
+        return jsonify({
+            "message": f"Appointment {intent}ed successfully!",
+            "appointment": result
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 def check_missing_fields(data):
     intent = data.get('intent', 'book')
-    required = []
+    required_fields = {
+        'book': [
+            'name', 'appointment_date', 'appointment_time',
+            'age', 'gender', 'contact_number', 'email', 'department'
+        ],
+        'reschedule': [
+            'name', 'old_date', 'old_time', 'new_date', 'new_time'
+        ],
+        'cancel': [
+            'name', 'appointment_date', 'appointment_time'
+        ],
+        'view': []
+    }.get(intent, [])
     
-    if intent == "book":
-        required = ["name", "appointment_date", "appointment_time", 
-                   "age", "gender", "contact_number", "email", 
-                   "department"]
-    elif intent == "reschedule":
-        required = ["name", "old_date", "old_time", "new_date", "new_time"]
-    elif intent == "cancel":
-        required = ["name", "appointment_date", "appointment_time"]
-        
-    return [field for field in required if not data.get(field)]
-
+    return [field for field in required_fields if not data.get(field)]
 
 @app.route('/api/book-appointment', methods=['POST'])
 def book():

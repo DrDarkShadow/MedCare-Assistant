@@ -2,6 +2,9 @@
 class ChatSystem {
     constructor() {
         this.pendingDetails = [];
+        this.missingFields = [];
+        this.currentState = {};
+        this.currentIntent = null;
         this.currentDetail = null;
         this.chatState = {};
         this.isCollecting = false;
@@ -36,11 +39,10 @@ class ChatSystem {
         }
 
         if (response.missing_fields?.length > 0) {
-            this.pendingDetails = response.missing_fields;
-            this.chatState = response.current_state;
-            this.isCollecting = true;
-            this.askNextDetail();
-            return;
+            this.missingFields = response.missing_fields;
+            this.currentState = response.current_state;
+            this.currentIntent = response.intent;
+            this.askNextField();
         }
 
         if (response.message) {
@@ -50,38 +52,51 @@ class ChatSystem {
         }
 
         // Update askNextDetail and sendCollectedDetails methods
-        askNextDetail() {
-            if (this.pendingDetails.length > 0) {
-                this.currentDetail = this.pendingDetails.shift();
-                const fieldName = this.currentDetail.replace(/_/g, ' ');
-                this.appendMessage(`Please provide your ${fieldName}:`, false);
-            } else {
-                this.sendCollectedDetails();
+        askNextField() {
+            if (this.missingFields.length > 0) {
+                const nextField = this.missingFields[0];
+                this.appendMessage(`Please provide your ${nextField.replace(/_/g, ' ')}:`, false);
             }
         }
 
             async sendCollectedDetails() {
                 this.appendMessage("🔄 Finalizing your appointment...", false);
         
-        try {
-            const response = await fetch('/ai-response', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'complete_booking',
-                    current_state: this.chatState
-                })
-            });
-            
-            const result = await response.json();
-            this.processAIResponse(result);
-            
-        } catch (error) {
-            this.appendMessage(`⚠️ Error: ${error.message}`, false);
-        }
+                try {
+                    const intent = this.chatState.intent;
+                    const action = `complete_${intent}`;
+                    
+                    this.appendMessage("🔄 Processing your request...", false);
+                    
+                    const response = await fetch('/ai-response', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: action,
+                            current_state: this.chatState
+                        })
+                    });
         
-        this.resetCollectionState();
-    }
+                    const result = await response.json();
+                    
+                    if (result.error) {
+                        this.appendMessage(`⚠️ Error: ${result.error}`, false);
+                    } else {
+                        const successMessage = {
+                            book: "✅ Appointment booked successfully!",
+                            reschedule: "✅ Appointment rescheduled successfully!",
+                            cancel: "✅ Appointment canceled successfully!"
+                        }[intent];
+                        
+                        this.appendMessage(successMessage, false);
+                        this.updateAppointments();
+                    }
+                } catch (error) {
+                    this.appendMessage(`⚠️ Error: ${error.message}`, false);
+                } finally {
+                    this.resetCollectionState();
+                }
+            }
 
     resetCollectionState() {
         this.pendingDetails = [];
@@ -106,6 +121,25 @@ class ChatSystem {
                     this.processAIResponse(response);
                 }
             }
+            async handleUserInput(message) {
+                if (this.missingFields.length > 0) {
+                    const currentField = this.missingFields.shift();
+                    this.currentState[currentField] = message; // Send raw input
+                    
+                    // Check if more fields needed
+                    if (this.missingFields.length === 0) {
+                        // All fields collected - process immediately
+                        const response = await this.fetchAIResponse(JSON.stringify({
+                            message: "complete_action",
+                            intent: this.currentIntent,
+                            details: this.currentState
+                        }));
+                        this.processAIResponse(response);
+                    } else {
+                        this.askNextField();
+                    }
+                }
+            }
         
             async finalizeBooking() {
                 this.appendMessage("🔄 Finalizing your appointment...", false);
@@ -124,18 +158,9 @@ class ChatSystem {
         input.value = '';
         this.appendMessage(message, true);
 
-        if (this.isCollecting) {
-            // Handle detail collection
-            this.chatState[this.currentDetail] = message;
-            const response = await this.fetchAIResponse(JSON.stringify({
-                action: 'update_field',
-                field: this.currentDetail,
-                value: message,
-                current_state: this.chatState
-            }));
-            this.processAIResponse(response);
+        if (this.missingFields.length > 0) {
+            this.handleUserInput(message);
         } else {
-            // Handle initial request
             const response = await this.fetchAIResponse(message);
             this.processAIResponse(response);
         }

@@ -86,7 +86,7 @@ def process_web_request(data):
         )
     # Handle other intents...
 
-    
+
 def convert_to_24hour_format(time_str):
     """Convert 12-hour time format to 24-hour format"""
     if not time_str:
@@ -288,8 +288,20 @@ def extract_intent_and_details(user_input):
             
         if "new_time" in extracted_data and extracted_data["new_time"]:
             extracted_data["new_time"] = convert_to_24hour_format(extracted_data["new_time"])
-            
-        return extracted_data
+
+         # Add conversions for all date/time fields
+        date_fields = ["appointment_date", "old_date", "new_date"]
+        time_fields = ["appointment_time", "old_time", "new_time"]
+        
+        for field in date_fields:
+            if extracted_data.get(field):
+                extracted_data[field] = convert_relative_date(extracted_data[field])
+                
+        for field in time_fields:
+            if extracted_data.get(field):
+                extracted_data[field] = convert_to_24hour_format(extracted_data[field])
+        
+        return extracted_data    
     except json.JSONDecodeError:
         print(f"❌ JSON Parsing Error: GPT-4o Response: {response}")
         return {"error": "Could not process input"}
