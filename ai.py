@@ -14,10 +14,10 @@ conversation_states = {}
 
 # Azure LLM Initialization
 llm = AzureChatOpenAI(
-    azure_endpoint="https://project-komp.openai.azure.com/",
+    azure_endpoint=os.getenv("AZURE_ENDPOINT"),
     azure_deployment="gpt-4o",
-    api_version="2023-09-01-preview",
-    api_key="CdTiGBHZd04q2kNbXKzMud27LvssSsfm0RkrTDlvPpDdHLKOknK9JQQJ99BAACYeBjFXJ3w3AAABACOGvVoL",
+    api_version=os.getenv("AZURE_API_VERSION"),
+    api_key=os.getenv("AZURE_API_KEY"),
     temperature=0
 )
 
