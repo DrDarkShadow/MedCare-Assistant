@@ -3,8 +3,7 @@ class ChatSystem {
     constructor() {
         this.pendingDetails = [];
         this.currentDetail = null;
-        this.chatState = {};
-        this.isCollecting = false;
+        this.chatState = { action: null, data: {} };
         this.isTyping = false;
         this.initializeChat();
     }
@@ -30,153 +29,107 @@ class ChatSystem {
     }
 
     async processAIResponse(response) {
+        console.log("🔹 Processing AI Response:", response);
         if (response.error) {
             this.appendMessage(`⚠️ Error: ${response.error}`, false);
             return;
-        }
-
-        if (response.missing_fields?.length > 0) {
-            this.pendingDetails = response.missing_fields;
-            this.chatState = response.current_state;
-            this.isCollecting = true;
-            this.askNextDetail();
-            return;
-        }
-
-        if (response.message) {
+          }
+      
+          if (response.message) {
             this.appendMessage(response.message, false);
-            this.updateAppointments();
-        }
-        }
-
-        // Update askNextDetail and sendCollectedDetails methods
-        askNextDetail() {
-            if (this.pendingDetails.length > 0) {
-                this.currentDetail = this.pendingDetails.shift();
-                const fieldName = this.currentDetail.replace(/_/g, ' ');
-                this.appendMessage(`Please provide your ${fieldName}:`, false);
-            } else {
-                this.sendCollectedDetails();
-            }
+            this.saveToHistory(response.message, false);
+          }
+      
+          if (response.new_state?.missing_details) {
+            this.pendingDetails = [...response.new_state.missing_details];
+            this.chatState = response.new_state;
+            this.askNextDetail();
+          }
         }
 
-            async sendCollectedDetails() {
-                this.appendMessage("🔄 Finalizing your appointment...", false);
-        
-        try {
-            const response = await fetch('/ai-response', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'complete_booking',
-                    current_state: this.chatState
-                })
-            });
-            
-            const result = await response.json();
-            this.processAIResponse(result);
-            
-        } catch (error) {
-            this.appendMessage(`⚠️ Error: ${error.message}`, false);
+    askNextDetail() {
+          if (this.pendingDetails.length > 0) {
+            this.currentDetail = this.pendingDetails.shift();
+            const promptMessage = `Please provide your ${this.currentDetail}:`;
+            this.appendMessage(promptMessage, false);
+            this.saveToHistory(promptMessage, false);
+          } else {
+            this.currentDetail = null;
+            this.sendCollectedDetails();
+          }
         }
-        
-        this.resetCollectionState();
-    }
-
-    resetCollectionState() {
-        this.pendingDetails = [];
-        this.currentDetail = null;
-        this.chatState = {};
-        this.isCollecting = false;
-
-            }
-            async handleUserResponse(message) {
-                if (this.isCollecting && this.missingFields.length > 0) {
-                    const currentField = this.missingFields.shift();
-                    this.currentState[currentField] = message;
-                    
-                    // Update backend with collected field
-                    const response = await this.fetchAIResponse(JSON.stringify({
-                        action: 'update_field',
-                        field: currentField,
-                        value: message,
-                        current_state: this.currentState
-                    }));
-                    
-                    this.processAIResponse(response);
-                }
-            }
-        
-            async finalizeBooking() {
-                this.appendMessage("🔄 Finalizing your appointment...", false);
-                const response = await this.fetchAIResponse(JSON.stringify({
-                    action: 'complete_booking',
-                    current_state: this.currentState
-                }));
-                this.processAIResponse(response);
-            }
+    async sendCollectedDetails() {
+            this.appendMessage("🔄 Processing your request...", false);
+            const updatedResponse = await this.fetchAIResponse(JSON.stringify(this.chatState.data));
+            await this.processAIResponse(updatedResponse);
+        }
     
-            async sendMessage() {
-                const input = document.getElementById('userInput');
+    async sendMessage() {
+        const input = document.getElementById('userInput');
         const message = input.value.trim();
         if (!message) return;
 
         input.value = '';
         this.appendMessage(message, true);
+        this.saveToHistory(message, true);
 
-        if (this.isCollecting) {
-            // Handle detail collection
-            this.chatState[this.currentDetail] = message;
-            const response = await this.fetchAIResponse(JSON.stringify({
-                action: 'update_field',
-                field: this.currentDetail,
-                value: message,
-                current_state: this.chatState
-            }));
-            this.processAIResponse(response);
-        } else {
-            // Handle initial request
-            const response = await this.fetchAIResponse(message);
-            this.processAIResponse(response);
-        }
-    
-            }
+        // Handle detail collection state
+        if (this.chatState.action === 'collect_details') {
+            const currentDetail = this.chatState.missingDetails[this.chatState.currentDetailIndex];
+            this.chatState.data[currentDetail] = message;
+            this.chatState.currentDetailIndex++;
 
-            handleAIResponse(response) {
-                if (response.error) {
-                    this.appendMessage(`⚠️ Error: ${response.error}`, false);
-                    return;
+            if (this.chatState.currentDetailIndex >= this.chatState.missingDetails.length) {
+                // All details collected, send to backend
+                try {
+                    const response = await this.fetchAIResponse(JSON.stringify({
+                        intent: 'book',
+                        ...this.chatState.data
+                    }));
+                    await this.processAIResponse(response);
+                    this.chatState = { action: null, data: {} }; // Reset state
+                } catch (error) {
+                    this.appendMessage(`⚠️ Error: ${error.message}`, false);
                 }
-        
-                if (response.missing_field) {
-                    this.appendMessage(response.message, false);
-                    // Frontend will wait for next user input automatically
-                } else if (response.appointment) {
-                    this.appendMessage("✅ " + response.message, false);
-                    this.updateAppointments();
-                }        
-            } 
-
-    // Modify the fetchAIResponse method
-        async fetchAIResponse(message) {
-            try {
-                console.log("🔹 Sending message to API:", message);
-                const response = await fetch('/ai-response', { 
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message })
-                });
-
-                console.log("🔹 API Response Status:", response.status);
-
-                if (!response.ok) throw new Error('Failed to get AI response');
-                return await response.json(); // Directly return the JSON response
-
-            } catch (error) {
-                console.error("Error:", error);
-                return { error: "Unable to connect to chatbot API" };
+            } else {
+                // Ask next detail
+                const nextDetail = this.chatState.missingDetails[this.chatState.currentDetailIndex];
+                this.appendMessage(`Please provide your ${nextDetail}:`, false);
             }
+            return;
         }
+
+        try {
+            const response = await this.fetchAIResponse(message);
+            await this.processAIResponse(response);
+        } catch (error) {
+            this.appendMessage(`⚠️ Error: ${error.message}`, false);
+        }
+    }
+
+    async fetchAIResponse(message) {
+    try {
+        console.log("🔹 Sending message to API:", message);  // ✅ Debug Log
+        const response = await fetch('http://127.0.0.1:5000/ai-response', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+        });
+
+        console.log("🔹 API Response Status:", response.status);  // ✅ Debug Log
+
+        if (!response.ok) throw new Error('Failed to get AI response');
+
+        const jsonResponse = await response.json();
+        console.log("🔹 AI Response:", jsonResponse);  // ✅ Debug Log
+
+        this.updateChatUI(jsonResponse.chat_history);  // ✅ Display Full Chat
+        return jsonResponse;
+    } catch (error) {
+        console.error("Error:", error);
+        return { error: "Unable to connect to chatbot API" };
+    }
+}
 
     appendMessage(content, isUser) {
         const messagesDiv = document.getElementById('chatMessages');
@@ -219,7 +172,7 @@ class ChatSystem {
     // Appointment System
     async updateAppointments() {
         try {
-            const response = await fetch('/api/appointments'); // Add 'const'
+            const response = await fetch('/api/appointments');
             const data = await response.json();
             this.renderAppointments(data.appointments);
         } catch (error) {

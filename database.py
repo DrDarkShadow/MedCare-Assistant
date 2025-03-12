@@ -111,7 +111,7 @@ def book_appointment(name, age, gender, contact_number, email, medical_history, 
         
         conn.commit()
         return {
-            "message": f"Appointment scheduled with {doctor_name}",
+            "message": f"Appointment scheduled with Dr. {doctor_name}",
             "patient_id": patient_id,
             "appointment_id": appointment_id,
             "doctor_id": doctor_id,
