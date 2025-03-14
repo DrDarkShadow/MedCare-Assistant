@@ -12,12 +12,15 @@ load_dotenv()
 # Add these state management variables at the top
 conversation_states = {}
 
+os.environ["AZURE_OPENAI_ENDPOINT"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+os.environ["AZURE_OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+
 # Azure LLM Initialization
 llm = AzureChatOpenAI(
-    azure_endpoint=os.getenv("AZURE_ENDPOINT"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
     azure_deployment="gpt-4o",
-    api_version=os.getenv("AZURE_API_VERSION"),
-    api_key=os.getenv("AZURE_API_KEY"),
+    api_version= "2023-09-01-preview",
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
     temperature=0
 )
 
